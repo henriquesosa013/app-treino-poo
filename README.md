@@ -11,6 +11,9 @@ Sistema simples de academia feito para a disciplina de Programação Orientada a
 - **Interface gráfica**: tela principal com botões em Tkinter
 - **Tratamento de erros**: erros lançados com `raise ValueError` e tratados com `try/except` em vez de `return`
 
+## Diagrama de classes
+![Diagrama de classes](diagrama-de-classes.jpg)
+
 ## Estrutura
 ```
 classes.py    # Pessoa, Aluno, Personal, Treino, Exercicio
