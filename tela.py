@@ -100,10 +100,8 @@ class TelaPrincipal:
     def enviar_treino(self):
         try:
             aluno = self.aluno_selecionado()
-            treino = Treino("Treino A - Peito", date.today())
-            treino.adicionar_exercicio("Supino reto", 4, 10, 40.0)
-            treino.adicionar_exercicio("Crucifixo", 3, 12, 14.0)
-            self.mostrar(self.personal.enviar_treino(aluno, treino))
+            # Abre a janela onde o personal monta o treino do zero
+            JanelaMontarTreino(self.janela, self.personal, aluno, self.mostrar)
         except ValueError as e:
             messagebox.showerror("Erro", str(e))
 
@@ -118,6 +116,121 @@ class TelaPrincipal:
             self.mostrar(self.personal.remover_aluno(self.aluno_selecionado()))
         except ValueError as e:
             messagebox.showerror("Erro", str(e))
+
+
+# =========================================================
+# JANELA PARA MONTAR UM TREINO PERSONALIZADO
+# Os exercícios ficam numa lista temporária (rascunho).
+# O Treino só é criado no envio, e é ELE que cria os
+# Exercicios (composição), via adicionar_exercicio().
+# =========================================================
+class JanelaMontarTreino:
+
+    def __init__(self, pai, personal, aluno, ao_enviar):
+        self.personal = personal
+        self.aluno = aluno
+        self.ao_enviar = ao_enviar   # função da tela principal para mostrar o resultado
+        self.rascunho = []           # lista de (nome, series, repeticoes, carga)
+
+        self.janela = tk.Toplevel(pai)
+        self.janela.title(f"Montar treino para {aluno.nome}")
+        self.janela.geometry("520x480")
+        self.janela.transient(pai)
+        self.janela.grab_set()       # bloqueia a tela principal enquanto monta o treino
+
+        tk.Label(self.janela, text=f"Novo treino para {aluno.nome}",
+                 font=("Arial", 14, "bold")).pack(pady=8)
+
+        # ---------- NOME DO TREINO ----------
+        topo = tk.Frame(self.janela)
+        topo.pack(fill="x", padx=10)
+        tk.Label(topo, text="Nome do treino:").pack(side="left")
+        self.nome_treino = tk.Entry(topo, width=35)
+        self.nome_treino.pack(side="left", padx=5)
+        self.nome_treino.focus()
+
+        # ---------- FORMULÁRIO DO EXERCÍCIO ----------
+        form = tk.LabelFrame(self.janela, text="Adicionar exercício", padx=10, pady=5)
+        form.pack(fill="x", padx=10, pady=8)
+
+        self.campos = {}
+        rotulos = ["Exercício", "Séries", "Repetições", "Carga (kg)"]
+        larguras = [20, 6, 6, 8]
+        for i, (rotulo, largura) in enumerate(zip(rotulos, larguras)):
+            tk.Label(form, text=rotulo).grid(row=0, column=i, sticky="w", padx=3)
+            entrada = tk.Entry(form, width=largura)
+            entrada.grid(row=1, column=i, padx=3)
+            entrada.bind("<Return>", lambda evento: self.adicionar())  # Enter adiciona
+            self.campos[rotulo] = entrada
+
+        tk.Button(form, text="Adicionar", command=self.adicionar).grid(row=1, column=4, padx=5)
+
+        # ---------- LISTA DE EXERCÍCIOS ----------
+        tk.Label(self.janela, text="Exercícios do treino:").pack(anchor="w", padx=10)
+        self.lista = tk.Listbox(self.janela, height=8)
+        self.lista.pack(fill="both", expand=True, padx=10)
+
+        # ---------- BOTÕES ----------
+        botoes = tk.Frame(self.janela)
+        botoes.pack(pady=10)
+        tk.Button(botoes, text="Remover exercício", width=16,
+                  command=self.remover).grid(row=0, column=0, padx=3)
+        tk.Button(botoes, text="Enviar para o aluno", width=16,
+                  command=self.enviar).grid(row=0, column=1, padx=3)
+        tk.Button(botoes, text="Cancelar", width=16,
+                  command=self.janela.destroy).grid(row=0, column=2, padx=3)
+
+    # ------------------------------------------------------
+    def ler_exercicio(self):
+        nome = self.campos["Exercício"].get().strip()
+        if not nome:
+            raise ValueError("Informe o nome do exercício.")
+        try:
+            series = int(self.campos["Séries"].get())
+            repeticoes = int(self.campos["Repetições"].get())
+            carga = float(self.campos["Carga (kg)"].get().replace(",", "."))
+        except ValueError:
+            raise ValueError("Séries e repetições precisam ser inteiros e a carga um número.")
+        if series <= 0 or repeticoes <= 0 or carga < 0:
+            raise ValueError("Séries e repetições devem ser maiores que zero e a carga não pode ser negativa.")
+        return nome, series, repeticoes, carga
+
+    def adicionar(self):
+        try:
+            nome, series, repeticoes, carga = self.ler_exercicio()
+            self.rascunho.append((nome, series, repeticoes, carga))
+            self.lista.insert(tk.END, f"{nome}: {series}x{repeticoes}, {carga} kg")
+            for entrada in self.campos.values():
+                entrada.delete(0, tk.END)
+            self.campos["Exercício"].focus()
+        except ValueError as e:
+            messagebox.showerror("Erro", str(e), parent=self.janela)
+
+    def remover(self):
+        selecao = self.lista.curselection()
+        if not selecao:
+            messagebox.showerror("Erro", "Selecione um exercício para remover.", parent=self.janela)
+            return
+        self.rascunho.pop(selecao[0])
+        self.lista.delete(selecao[0])
+
+    def enviar(self):
+        try:
+            nome = self.nome_treino.get().strip()
+            if not nome:
+                raise ValueError("Dê um nome para o treino (ex: Treino B - Costas).")
+            if not self.rascunho:
+                raise ValueError("Adicione pelo menos um exercício.")
+
+            treino = Treino(nome, date.today())
+            for exercicio in self.rascunho:
+                treino.adicionar_exercicio(*exercicio)  # o Treino cria os Exercicios
+
+            resultado = self.personal.enviar_treino(self.aluno, treino)
+            self.ao_enviar(f"{resultado}\n\n{treino.listar_exercicios()}")
+            self.janela.destroy()
+        except ValueError as e:
+            messagebox.showerror("Erro", str(e), parent=self.janela)
 
 
 if __name__ == "__main__":
